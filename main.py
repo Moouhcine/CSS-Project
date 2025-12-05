@@ -1,13 +1,13 @@
 import flet as ft
 import pyperclip
-
-from cvss import calculate_base_score, METRIC_FIELDS, vector_string
 import csv
 import io
-import asyncio
+
+from cvss import calculate_base_score, METRIC_FIELDS, vector_string
 from parser import parse_csv_text, parse_json_text
 from storage import Store
 from ui_components import pill, section_title, info_card, toast_bar
+
 
 METRIC_OPTIONS = {
     "AV": [("N", "Network"), ("A", "Adjacent"), ("L", "Local"), ("P", "Physical")],
@@ -20,8 +20,10 @@ METRIC_OPTIONS = {
     "A":  [("H", "High"), ("L", "Low"), ("N", "None")],
 }
 
+
 def split_csv_field(s: str):
     return [x.strip() for x in (s or "").split(",") if x.strip()]
+
 
 def main(page: ft.Page):
     page.title = "RiskMapper (Flet) — CVSS + Attack Surface"
@@ -33,64 +35,116 @@ def main(page: ft.Page):
     store = Store()
     store.load_from_db()
 
-
     # ----------------------------
-    # Shared toasts
+    # Shared UI helpers
     # ----------------------------
     def notify(msg: str, kind: str = "info"):
         page.snack_bar = toast_bar(msg, kind)
         page.snack_bar.open = True
         page.update()
 
-    async def copy_to_clipboard(text: str):
-        # API récente: page.clipboard.set(...) (async)
-        if hasattr(page, "clipboard") and page.clipboard:
-            await page.clipboard.set(text)
-            notify("Vector copied to clipboard ✅", "success")
-            return
-
-        # fallback vieux Flet (si jamais)
-        if hasattr(page, "set_clipboard"):
-            page.set_clipboard(text)
-            notify("Vector copied to clipboard ✅", "success")
-            return
-
-    notify("Clipboard API not available in this Flet version.", "error")
     def copy_text(text: str):
         """
-        Tries (1) page.set_clipboard (older Flet) then (2) page.clipboard.set (newer Flet) then (3) pyperclip.
+        Clipboard: try page.set_clipboard (common in many Flet versions), fallback to pyperclip.
         """
         try:
             if hasattr(page, "set_clipboard"):
-                page.set_clipboard(text)  # older/known working API in many versions
+                page.set_clipboard(text)
                 notify("Copied to clipboard ✅", "success")
                 return
         except Exception:
             pass
 
-        try:
-            if hasattr(page, "clipboard") and page.clipboard is not None:
-                # newer API is async; some versions expose it
-                import asyncio
-                asyncio.create_task(page.clipboard.set(text))
-                notify("Copied to clipboard ✅", "success")
-                return
-        except Exception:
-            pass
-
-        # Fallback: OS clipboard (desktop)
         try:
             pyperclip.copy(text)
             notify("Copied to clipboard ✅", "success")
         except Exception as ex:
             notify(f"Clipboard copy failed: {ex}", "error")
 
-    
+    # ----------------------------
+    # Export helpers
+    # ----------------------------
+    export_picker = ft.FilePicker()
+    page.overlay.append(export_picker)
+
+    assets_export_picker = ft.FilePicker()
+    page.overlay.append(assets_export_picker)
+
+    assets_export_ctx = {"asset_names": []}
+
+    def build_findings_csv() -> str:
+        output = io.StringIO()
+        w = csv.writer(output)
+        w.writerow(["id", "asset", "title", "score", "severity", "vector", "AV", "AC", "PR", "UI", "S", "C", "I", "A"])
+
+        sorted_findings = sorted(store.findings.values(), key=lambda x: x.score, reverse=True)
+        for f in sorted_findings:
+            m = f.metrics
+            w.writerow([
+                f.id, f.asset_name, f.title, f"{f.score:.1f}", f.severity, getattr(f, "vector", ""),
+                m["AV"], m["AC"], m["PR"], m["UI"], m["S"], m["C"], m["I"], m["A"]
+            ])
+        return output.getvalue()
+
+    def build_findings_csv_for_assets(asset_names: list[str]) -> str:
+        output = io.StringIO()
+        w = csv.writer(output)
+        w.writerow(["id", "asset", "title", "score", "severity", "vector", "AV", "AC", "PR", "UI", "S", "C", "I", "A"])
+
+        selected_set = {a.strip().lower() for a in asset_names if a and a.strip()}
+        findings = [
+            f for f in store.findings.values()
+            if f.asset_name.strip().lower() in selected_set
+        ]
+        findings.sort(key=lambda x: x.score, reverse=True)
+
+        for f in findings:
+            m = f.metrics
+            w.writerow([
+                f.id, f.asset_name, f.title, f"{f.score:.1f}", f.severity, getattr(f, "vector", ""),
+                m["AV"], m["AC"], m["PR"], m["UI"], m["S"], m["C"], m["I"], m["A"]
+            ])
+
+        return output.getvalue()
+
+    def on_export_result(e: ft.FilePickerResultEvent):
+        if not e.path:
+            return
+        try:
+            csv_text = build_findings_csv()
+            with open(e.path, "w", encoding="utf-8", newline="") as f:
+                f.write(csv_text)
+            notify(f"CSV exported ✅\n{e.path}", "success")
+        except Exception as ex:
+            notify(f"Export failed: {ex}", "error")
+
+    export_picker.on_result = on_export_result
+
+    def on_assets_export_result(e: ft.FilePickerResultEvent):
+        if not e.path:
+            return
+        try:
+            names = assets_export_ctx["asset_names"]
+            if not names:
+                notify("No assets selected.", "warning")
+                return
+
+            csv_text = build_findings_csv_for_assets(names)
+            with open(e.path, "w", encoding="utf-8", newline="") as f:
+                f.write(csv_text)
+
+            notify(f"Selected assets CSV exported ✅\n{e.path}", "success")
+        except Exception as ex:
+            notify(f"Export failed: {ex}", "error")
+
+    assets_export_picker.on_result = on_assets_export_result
+
     # ----------------------------
     # DASHBOARD
     # ----------------------------
     dash_counts = ft.Column(spacing=6)
     dash_latest = ft.Column(spacing=8, scroll=ft.ScrollMode.AUTO, height=270)
+
     def go_tab(i: int):
         tabs.selected_index = i
         tabs.update()
@@ -137,9 +191,7 @@ def main(page: ft.Page):
                 [
                     ft.ResponsiveRow(
                         col=6,
-                        controls=[
-                            info_card("Findings by Severity", dash_counts),
-                        ],
+                        controls=[info_card("Findings by Severity", dash_counts)],
                     ),
                     ft.ResponsiveRow(
                         col=6,
@@ -149,17 +201,16 @@ def main(page: ft.Page):
                                 ft.Column(
                                     [
                                         ft.ElevatedButton("Open CVSS Calculator", on_click=lambda e: go_tab(1)),
-ft.ElevatedButton("Import Findings", on_click=lambda e: go_tab(2)),
-ft.ElevatedButton("Manage Assets", on_click=lambda e: go_tab(3)),
+                                        ft.ElevatedButton("Import Findings", on_click=lambda e: go_tab(2)),
+                                        ft.ElevatedButton("Manage Assets", on_click=lambda e: go_tab(3)),
                                         ft.ElevatedButton(
-    "Export Findings to CSV",
-    icon=ft.icons.DOWNLOAD,
-    on_click=lambda e: export_picker.save_file(
-        file_name="riskmapper_findings.csv",
-        allowed_extensions=["csv"],
-    ),
-),
-
+                                            "Export Findings to CSV",
+                                            icon=ft.icons.DOWNLOAD,
+                                            on_click=lambda e: export_picker.save_file(
+                                                file_name="riskmapper_findings.csv",
+                                                allowed_extensions=["csv"],
+                                            ),
+                                        ),
                                     ],
                                     spacing=10,
                                 ),
@@ -184,11 +235,8 @@ ft.ElevatedButton("Manage Assets", on_click=lambda e: go_tab(3)),
         opts = [ft.dropdown.Option(code, text=f"{code} — {label}") for code, label in METRIC_OPTIONS[k]]
         metric_dropdowns[k] = ft.Dropdown(label=k, options=opts)
 
-
     calc_result_line = ft.Row([], spacing=10)
     calc_details = ft.Column([], spacing=6)
-
-    last_result = {"score": None, "severity": None, "impact": None, "exploitability": None}
 
     def do_calculate(save: bool):
         try:
@@ -196,44 +244,39 @@ ft.ElevatedButton("Manage Assets", on_click=lambda e: go_tab(3)),
             res = calculate_base_score(metrics)
             vec = vector_string(metrics)
 
-
-            last_result["score"] = res.score
-            last_result["severity"] = res.severity
-            last_result["impact"] = res.impact
-            last_result["exploitability"] = res.exploitability
-
             calc_result_line.controls = [
                 ft.Text(f"Base Score: {res.score:.1f}", size=20, weight=ft.FontWeight.BOLD),
                 pill(res.severity),
             ]
-            calc_details.controls = [
-    ft.Text(f"Impact: {res.impact:.1f}"),
-    ft.Text(f"Exploitability: {res.exploitability:.1f}"),
-    ft.Row(
-        [
-            ft.Text(f"Vector: {vec}", selectable=True, expand=True, opacity=0.85),
-            ft.IconButton(
-                icon=ft.icons.CONTENT_COPY,
-                tooltip="Copy CVSS vector",
-                on_click=lambda e, v=vec: copy_text(v),
-            ),
-        ],
-        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-    ),
-]
 
+            calc_details.controls = [
+                ft.Text(f"Impact: {res.impact:.1f}"),
+                ft.Text(f"Exploitability: {res.exploitability:.1f}"),
+                ft.Row(
+                    [
+                        ft.Text(f"Vector: {vec}", selectable=True, expand=True, opacity=0.85),
+                        ft.IconButton(
+                            icon=ft.icons.CONTENT_COPY,
+                            tooltip="Copy CVSS vector",
+                            on_click=lambda e, v=vec: copy_text(v),
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                ),
+            ]
 
             if save:
                 store.add_finding(
-    asset_name=calc_asset.value or "Unassigned",
-    title=calc_title.value or "Manual Finding",
-    metrics={k: metrics[k] for k in METRIC_FIELDS},
-    score=res.score,
-    severity=res.severity,
-    vector=vec,
-)
+                    asset_name=calc_asset.value or "Unassigned",
+                    title=calc_title.value or "Manual Finding",
+                    metrics={k: metrics[k] for k in METRIC_FIELDS},
+                    score=res.score,
+                    severity=res.severity,
+                    vector=vec,
+                )
                 rebuild_all()
                 notify("Finding saved.", "success")
+
             page.update()
 
         except Exception as ex:
@@ -242,19 +285,15 @@ ft.ElevatedButton("Manage Assets", on_click=lambda e: go_tab(3)),
     calculator_view = ft.Column(
         [
             section_title("CVSS v3.1 Calculator"),
-            info_card(
-                "Finding Info",
-                ft.Column([calc_asset, calc_title], spacing=10),
-            ),
+            info_card("Finding Info", ft.Column([calc_asset, calc_title], spacing=10)),
             info_card(
                 "Base Metrics",
                 ft.Row(
-    controls=list(metric_dropdowns.values()),
-    wrap=True,
-    spacing=12,
-    run_spacing=12,
-),
-
+                    controls=list(metric_dropdowns.values()),
+                    wrap=True,
+                    spacing=12,
+                    run_spacing=12,
+                ),
             ),
             ft.Row(
                 [
@@ -263,10 +302,7 @@ ft.ElevatedButton("Manage Assets", on_click=lambda e: go_tab(3)),
                 ],
                 spacing=12,
             ),
-            info_card(
-                "Result",
-                ft.Column([calc_result_line, calc_details], spacing=10),
-            ),
+            info_card("Result", ft.Column([calc_result_line, calc_details], spacing=10)),
             ft.Text(
                 "Tip: Link findings to assets by using the exact same asset name in Assets tab.",
                 opacity=0.7,
@@ -289,6 +325,7 @@ ft.ElevatedButton("Manage Assets", on_click=lambda e: go_tab(3)),
         ),
         value="csv",
     )
+
     import_text = ft.TextField(
         label="Paste CSV/JSON here (or load from file)",
         multiline=True,
@@ -299,14 +336,10 @@ ft.ElevatedButton("Manage Assets", on_click=lambda e: go_tab(3)),
 
     file_picker = ft.FilePicker()
     page.overlay.append(file_picker)
-    export_picker = ft.FilePicker()
-    page.overlay.append(export_picker)
-
 
     def on_file_result(e: ft.FilePickerResultEvent):
         if not e.files:
             return
-        # Flet gives a path; read locally
         try:
             path = e.files[0].path
             with open(path, "r", encoding="utf-8", errors="replace") as f:
@@ -315,73 +348,8 @@ ft.ElevatedButton("Manage Assets", on_click=lambda e: go_tab(3)),
             page.update()
         except Exception as ex:
             notify(f"Failed reading file: {ex}", "error")
-    
 
     file_picker.on_result = on_file_result
-
-    def build_findings_csv() -> str:
-        output = io.StringIO()
-        w = csv.writer(output)
-        w.writerow(["id", "asset", "title", "score", "severity", "vector", "AV", "AC", "PR", "UI", "S", "C", "I", "A"])
-
-        # Tri: score desc
-        sorted_findings = sorted(store.findings.values(), key=lambda x: x.score, reverse=True)
-
-        for f in sorted_findings:
-            m = f.metrics
-            w.writerow([f.id, f.asset_name, f.title, f"{f.score:.1f}", f.severity, f.vector,
-                        m["AV"], m["AC"], m["PR"], m["UI"], m["S"], m["C"], m["I"], m["A"]])
-        return output.getvalue()
-    def build_findings_csv_for_asset(asset_name: str) -> str:
-        output = io.StringIO()
-        w = csv.writer(output)
-        w.writerow(["id", "asset", "title", "score", "severity", "vector", "AV", "AC", "PR", "UI", "S", "C", "I", "A"])
-
-        findings = store.findings_for_asset_name(asset_name)
-        findings = sorted(findings, key=lambda x: x.score, reverse=True)
-
-        for f in findings:
-            m = f.metrics
-            w.writerow([
-                f.id, f.asset_name, f.title, f"{f.score:.1f}", f.severity, f.vector,
-                m["AV"], m["AC"], m["PR"], m["UI"], m["S"], m["C"], m["I"], m["A"]
-            ])
-
-        return output.getvalue()
-    def on_export_result(e: ft.FilePickerResultEvent):
-        if not e.path:
-            return
-        try:
-            csv_text = build_findings_csv()
-            with open(e.path, "w", encoding="utf-8", newline="") as f:
-                f.write(csv_text)
-            notify(f"CSV exported ✅\n{e.path}", "success")
-        except Exception as ex:
-            notify(f"Export failed: {ex}", "error")
-
-    export_picker.on_result = on_export_result
-    asset_export_picker = ft.FilePicker()
-    page.overlay.append(asset_export_picker)
-    asset_export_ctx = {"asset_name": None}
-
-    def on_asset_export_result(e: ft.FilePickerResultEvent):
-        if not e.path:
-            return
-        try:
-            name = asset_export_ctx["asset_name"]
-            if not name:
-                notify("No asset selected.", "warning")
-                return
-
-            csv_text = build_findings_csv_for_asset(name)
-            with open(e.path, "w", encoding="utf-8", newline="") as f:
-                f.write(csv_text)
-
-            notify(f"Asset CSV exported ✅\n{e.path}", "success")
-        except Exception as ex:
-            notify(f"Asset export failed: {ex}", "error")
-
-    asset_export_picker.on_result = on_asset_export_result
 
     def do_import():
         txt = import_text.value or ""
@@ -400,20 +368,18 @@ ft.ElevatedButton("Manage Assets", on_click=lambda e: go_tab(3)),
                 try:
                     res = calculate_base_score(metrics)
                     vec = vector_string(metrics)
-
                 except Exception:
                     skipped += 1
                     continue
 
                 store.add_finding(
-    asset_name=item["asset"],
-    title=item["title"],
-    metrics=metrics,
-    score=res.score,
-    severity=res.severity,
-    vector=vec,
-)
-
+                    asset_name=item["asset"],
+                    title=item["title"],
+                    metrics=metrics,
+                    score=res.score,
+                    severity=res.severity,
+                    vector=vec,
+                )
                 valid += 1
 
             rebuild_all()
@@ -471,18 +437,39 @@ ft.ElevatedButton("Manage Assets", on_click=lambda e: go_tab(3)),
     )
 
     # ----------------------------
-    # ASSETS (attack surface mapper)
+    # ASSETS (attack surface mapper) - Multi select + Export B
     # ----------------------------
     asset_name = ft.TextField(label="Asset name", hint_text="e.g., api.example.com or 10.0.0.12")
     asset_tags = ft.TextField(label="Tags (comma-separated)", hint_text="internet-facing, prod, pci")
     asset_services = ft.TextField(label="Services (comma-separated)", hint_text="80/http, 443/https, 22/ssh")
 
     assets_list = ft.Column(spacing=8, scroll=ft.ScrollMode.AUTO, height=420)
-
-    asset_detail_title = ft.Text("Select an asset to view risk details.", size=16, weight=ft.FontWeight.BOLD)
+    asset_detail_title = ft.Text("Select assets to view details.", size=16, weight=ft.FontWeight.BOLD)
     asset_detail_body = ft.Column(spacing=8)
 
-    selected_asset_id = {"id": None}
+    selected_assets = set()            # multi-select: asset IDs
+    last_selected_asset = {"id": None} # last click -> details panel
+
+    def export_selected_assets():
+        if not selected_assets:
+            notify("Select at least one asset first.", "warning")
+            return
+
+        names = []
+        for aid in selected_assets:
+            if aid in store.assets:
+                names.append(store.assets[aid].name)
+
+        if not names:
+            notify("Selection contains no valid assets.", "warning")
+            return
+
+        assets_export_ctx["asset_names"] = names
+
+        assets_export_picker.save_file(
+            file_name="riskmapper_selected_assets_findings.csv",
+            allowed_extensions=["csv"],
+        )
 
     def rebuild_assets_list():
         assets_list.controls.clear()
@@ -502,10 +489,20 @@ ft.ElevatedButton("Manage Assets", on_click=lambda e: go_tab(3)),
                 max_score = 0.0
                 avg_score = 0.0
 
-            def on_select(e):
-                selected_asset_id["id"] = aid
+            def on_toggle(e):
+                if aid in selected_assets:
+                    selected_assets.remove(aid)
+                    if last_selected_asset["id"] == aid:
+                        last_selected_asset["id"] = None
+                else:
+                    selected_assets.add(aid)
+                    last_selected_asset["id"] = aid
+
+                rebuild_assets_list()
                 rebuild_asset_detail()
                 page.update()
+
+            is_selected = (aid in selected_assets)
 
             return ft.Container(
                 content=ft.Row(
@@ -514,10 +511,13 @@ ft.ElevatedButton("Manage Assets", on_click=lambda e: go_tab(3)),
                         ft.Text(f"Findings: {len(findings)}", width=110),
                         ft.Text(f"Max: {max_score:.1f}", width=90),
                         ft.Text(f"Avg: {avg_score:.1f}", width=90),
-                        ft.IconButton(icon=ft.icons.CHEVRON_RIGHT, on_click=on_select),
+                        ft.IconButton(icon=ft.icons.CHEVRON_RIGHT, on_click=on_toggle),
                     ],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 ),
+                on_click=on_toggle,
+                ink=True,
+                bgcolor=ft.colors.with_opacity(0.14, ft.colors.BLUE) if is_selected else None,
                 padding=10,
                 border=ft.border.all(1, ft.colors.with_opacity(0.12, ft.colors.WHITE)),
                 border_radius=14,
@@ -528,17 +528,27 @@ ft.ElevatedButton("Manage Assets", on_click=lambda e: go_tab(3)),
 
         page.update()
 
+    def clear_selection(e):
+        selected_assets.clear()
+        last_selected_asset["id"] = None
+        rebuild_assets_list()
+        rebuild_asset_detail()
+        page.update()
+
     def rebuild_asset_detail():
-        aid = selected_asset_id["id"]
+        aid = last_selected_asset["id"]
         asset_detail_body.controls.clear()
 
         if not aid or aid not in store.assets:
-            asset_detail_title.value = "Select an asset to view risk details."
+            asset_detail_title.value = (
+                "Select assets (multi-select is allowed). "
+                "Details shows the last clicked asset."
+            )
             page.update()
             return
 
         a = store.assets[aid]
-        asset_detail_title.value = f"Asset: {a.name}"
+        asset_detail_title.value = f"Asset (last selected): {a.name}"
 
         findings = store.findings_for_asset_name(a.name)
         if findings:
@@ -552,31 +562,15 @@ ft.ElevatedButton("Manage Assets", on_click=lambda e: go_tab(3)),
         for f in findings:
             counts[f.severity] = counts.get(f.severity, 0) + 1
 
-        # Findings table blocks
         finding_cards = ft.Column(spacing=8)
         if not findings:
             finding_cards.controls.append(ft.Text("No findings mapped to this asset yet.", opacity=0.75))
         else:
-            # Sort by score desc
             for f in sorted(findings, key=lambda x: x.score, reverse=True):
-                vector_short = f.vector
-
                 finding_cards.controls.append(
                     ft.Container(
                         content=ft.Column(
                             [
-                                ft.Row(
-    [
-        ft.Text(f.vector, size=12, opacity=0.75, expand=True, selectable=True),
-        ft.IconButton(
-            icon=ft.icons.CONTENT_COPY,
-            tooltip="Copy vector",
-            on_click=lambda e, v=f.vector: copy_text(v),
-        ),
-    ],
-    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-),
-
                                 ft.Row(
                                     [
                                         ft.Text(f.title, expand=True),
@@ -590,7 +584,17 @@ ft.ElevatedButton("Manage Assets", on_click=lambda e: go_tab(3)),
                                     ],
                                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                                 ),
-                                ft.Text(vector_short, size=12, opacity=0.75),
+                                ft.Row(
+                                    [
+                                        ft.Text(getattr(f, "vector", ""), size=12, opacity=0.75, expand=True, selectable=True),
+                                        ft.IconButton(
+                                            icon=ft.icons.CONTENT_COPY,
+                                            tooltip="Copy vector",
+                                            on_click=lambda e, v=getattr(f, "vector", ""): copy_text(v),
+                                        ),
+                                    ],
+                                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                                ),
                             ],
                             spacing=6,
                         ),
@@ -601,8 +605,12 @@ ft.ElevatedButton("Manage Assets", on_click=lambda e: go_tab(3)),
                 )
 
         def delete_asset():
+            # Remove from selection sets too
+            if aid in selected_assets:
+                selected_assets.remove(aid)
+            last_selected_asset["id"] = None
+
             store.delete_asset(aid)
-            selected_asset_id["id"] = None
             rebuild_all()
             notify("Asset deleted.", "success")
 
@@ -638,14 +646,23 @@ ft.ElevatedButton("Manage Assets", on_click=lambda e: go_tab(3)),
                             ),
                             ft.Row(
                                 [
-                                    ft.OutlinedButton("Delete Asset", icon=ft.icons.DELETE, on_click=lambda e: delete_asset()),
                                     ft.ElevatedButton(
-    "Export selected asset to CSV",
-    icon=ft.Icons.DOWNLOAD,
-    on_click=lambda e: export_selected_asset(),
-),
-
+                                        "Export selected assets to CSV",
+                                        icon=ft.icons.DOWNLOAD,
+                                        on_click=lambda e: export_selected_assets(),
+                                    ),
+                                    ft.OutlinedButton(
+                                        "Clear selection",
+                                        icon=ft.icons.CLEAR,
+                                        on_click=clear_selection,
+                                    ),
+                                    ft.OutlinedButton(
+                                        "Delete this asset",
+                                        icon=ft.icons.DELETE,
+                                        on_click=lambda e: delete_asset(),
+                                    ),
                                 ],
+                                wrap=True,
                                 spacing=10,
                             ),
                         ],
@@ -656,24 +673,13 @@ ft.ElevatedButton("Manage Assets", on_click=lambda e: go_tab(3)),
             ]
         )
         page.update()
-    def export_selected_asset():
-        aid = selected_asset_id["id"]
-        if not aid or aid not in store.assets:
-            notify("Select an asset first.", "warning")
-            return
-
-        a = store.assets[aid]
-        asset_export_ctx["asset_name"] = a.name  # <- on mémorise le nom cible
-        asset_export_picker.save_file(
-            file_name=f"riskmapper_{a.name}_findings.csv",
-            allowed_extensions=["csv"],
-        )
 
     def add_asset_action(e):
         name = (asset_name.value or "").strip()
         if not name:
             notify("Asset name is required.", "error")
             return
+
         tags = split_csv_field(asset_tags.value)
         services = split_csv_field(asset_services.value)
         store.add_asset(name=name, tags=tags, services=services)
@@ -701,18 +707,31 @@ ft.ElevatedButton("Manage Assets", on_click=lambda e: go_tab(3)),
                                     asset_tags,
                                     asset_services,
                                     ft.ElevatedButton("Add Asset", on_click=add_asset_action),
+                                    ft.Row(
+                                        [
+                                            ft.ElevatedButton(
+                                                "Export selected assets to CSV",
+                                                icon=ft.icons.DOWNLOAD,
+                                                on_click=lambda e: export_selected_assets(),
+                                            ),
+                                            ft.OutlinedButton(
+                                                "Clear selection",
+                                                icon=ft.icons.CLEAR,
+                                                on_click=clear_selection,
+                                            ),
+                                        ],
+                                        wrap=True,
+                                        spacing=10,
+                                    ),
                                 ],
                                 spacing=10,
                             ),
                         ),
                     ),
-                    ft.Container(
-                        col=7,
-                        content=info_card("Assets", assets_list),
-                    ),
+                    ft.Container(col=7, content=info_card("Assets (click row to toggle select)", assets_list)),
                 ]
             ),
-            info_card("Asset Details", ft.Column([asset_detail_title, asset_detail_body], spacing=12)),
+            info_card("Asset Details (last selected)", ft.Column([asset_detail_title, asset_detail_body], spacing=12)),
         ],
         spacing=16,
         scroll=ft.ScrollMode.AUTO,
@@ -742,8 +761,7 @@ ft.ElevatedButton("Manage Assets", on_click=lambda e: go_tab(3)),
     )
 
     page.add(tabs)
-
-    # Initial build
     rebuild_all()
+
 
 ft.app(target=main)
