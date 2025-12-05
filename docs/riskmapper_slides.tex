@@ -1,0 +1,75 @@
+\documentclass{beamer}
+\usetheme{Madrid}
+
+\title{RiskMapper: CVSS-Based Risk \& Attack Surface Mapping}
+\subtitle{CSS Module • Chapter 6 (Scanning \& CVSS)}
+\author{Student Name}
+\date{\today}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}{Problem}
+\begin{itemize}
+  \item Vulnerability scanners generate many findings.
+  \item Teams need a consistent method to \textbf{prioritize remediation}.
+  \item Raw scan output lacks asset context (attack surface).
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Solution: RiskMapper (Flet Desktop App)}
+\begin{itemize}
+  \item CVSS v3.1 Base Score calculator
+  \item Severity classification: None/Low/Medium/High/Critical
+  \item Import findings from CSV/JSON
+  \item Attack surface inventory: assets + tags + exposed services
+  \item Asset-centric risk view: max/avg score and severity counts
+\end{itemize}
+\end{frame}
+
+\begin{frame}{CVSS v3.1 Base Metrics}
+\begin{itemize}
+  \item Exploitability: AV, AC, PR, UI
+  \item Impact: C, I, A and Scope (S)
+  \item Output:
+  \begin{itemize}
+    \item Base Score (0.0--10.0)
+    \item Severity label for triage
+  \end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Workflow (Demo)}
+\begin{enumerate}
+  \item Add assets (hostname/IP) + tags + services
+  \item Add a finding manually OR import from CSV/JSON
+  \item Tool calculates CVSS score and severity
+  \item Dashboard and Assets view show what to fix first
+\end{enumerate}
+\end{frame}
+
+\begin{frame}{Why it matters}
+\begin{itemize}
+  \item Consistent scoring across vulnerabilities
+  \item Faster remediation decisions (Critical/High first)
+  \item Attack-surface view helps focus on exposed systems
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Next Improvements}
+\begin{itemize}
+  \item SQLite persistence and multi-user authentication
+  \item Export CVSS vector strings
+  \item Import from real scanner formats (Nmap XML, Nessus)
+  \item Trend charts and SLA tracking
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\centering \Large Questions?
+\end{frame}
+
+\end{document}

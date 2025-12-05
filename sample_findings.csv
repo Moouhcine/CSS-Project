@@ -1,0 +1,6 @@
+asset,title,AV,AC,PR,UI,S,C,I,A
+web-01,XSS in search,N,L,N,R,U,L,L,N
+web-01,Admin panel exposed,N,L,N,N,U,N,N,N
+api-01,SQL Injection,N,L,N,N,U,H,H,H
+db-01,Weak SSH configuration,A,H,L,R,U,N,L,N
+Unassigned,Outdated library (DoS),N,L,N,R,U,N,N,L

@@ -1,0 +1,5 @@
+[
+  {"asset":"web-01","title":"Reflected XSS in search","AV":"N","AC":"L","PR":"N","UI":"R","S":"U","C":"L","I":"L","A":"N"},
+  {"asset":"api-01","title":"SQL Injection in /login","AV":"N","AC":"L","PR":"N","UI":"N","S":"U","C":"H","I":"H","A":"H"},
+  {"asset":"vpn-01","title":"Privilege Escalation via misconfig","AV":"A","AC":"L","PR":"L","UI":"N","S":"C","C":"H","I":"H","A":"H"}
+]

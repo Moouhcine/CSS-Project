@@ -1,0 +1,129 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single
+}
+
+\title{\textbf{RiskMapper: Risk and Attack Surface Mapping Tool}\\
+\large CVSS-Based Vulnerability Prioritization (Chapter 6: Scanning, CVSS)}
+\author{Student Name \quad | \quad CSS Module}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+RiskMapper is a desktop application built with Python and Flet that translates scanning and
+vulnerability data into a standardized risk assessment using the CVSS v3.1 Base Score. The tool
+supports manual metric input and bulk importing from CSV/JSON, classifies findings by severity,
+and maps vulnerabilities to an attack surface inventory of assets and exposed services to support
+remediation prioritization.
+\end{abstract}
+
+\section{Objectives}
+The project aims to:
+\begin{itemize}[leftmargin=*]
+  \item Implement CVSS v3.1 Base Score computation (AV, AC, PR, UI, S, C, I, A).
+  \item Display both the final score and severity label for prioritization.
+  \item Import multiple findings (CSV/JSON) produced by scanners or simplified exports.
+  \item Model attack surface: assets, tags (e.g., internet-facing), and exposed services/ports.
+  \item Provide asset-centric risk summaries (max/avg score and severity counts).
+\end{itemize}
+
+\section{Background: Scanning and CVSS}
+Vulnerability scanning can generate hundreds of findings. Not all require immediate action.
+CVSS is a standardized method to assess severity and prioritize remediation. RiskMapper focuses on
+the \textbf{Base Score} (most commonly used for initial triage) which combines:
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Exploitability}: AV, AC, PR, UI
+  \item \textbf{Impact}: Confidentiality (C), Integrity (I), Availability (A), with Scope (S)
+\end{itemize}
+
+\section{System Overview}
+\subsection{Technology Choice (Flet)}
+Flet enables a modern GUI using Python, without building a web frontend manually. The application
+runs locally and is suitable for classroom demonstration.
+
+\subsection{High-level Modules}
+\begin{itemize}[leftmargin=*]
+  \item \texttt{cvss.py}: CVSS v3.1 Base Score logic and severity classification.
+  \item \texttt{parser.py}: CSV/JSON parsing into finding records.
+  \item \texttt{storage.py}: in-memory store for assets and findings (educational scope).
+  \item \texttt{main.py}: Flet UI with tabs: Dashboard, Calculator, Import, Assets.
+\end{itemize}
+
+\section{CVSS v3.1 Base Score Implementation}
+\subsection{Supported Metrics}
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Metric & Values \\
+\midrule
+AV & N, A, L, P \\
+AC & L, H \\
+PR & N, L, H (depends on Scope) \\
+UI & N, R \\
+S  & U, C \\
+C/I/A & H, L, N \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Computation Summary}
+RiskMapper implements the official CVSS v3.1 Base formula:
+\begin{itemize}[leftmargin=*]
+  \item Exploitability = $8.22 \times AV \times AC \times PR \times UI$
+  \item ImpactSubScore = $1 - (1-C)(1-I)(1-A)$
+  \item Scope changes impact calculation and scales the final score by 1.08 when Scope is Changed.
+  \item Final score is capped at 10.0 and \textbf{rounded up} to one decimal place.
+\end{itemize}
+
+\subsection{Severity Levels}
+\begin{itemize}[leftmargin=*]
+  \item None: 0.0
+  \item Low: 0.1--3.9
+  \item Medium: 4.0--6.9
+  \item High: 7.0--8.9
+  \item Critical: 9.0--10.0
+\end{itemize}
+
+\section{Attack Surface Mapping}
+Attack surface is represented as:
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Assets}: hostnames, IPs, or applications.
+  \item \textbf{Tags}: context such as \textit{internet-facing}, \textit{production}, or \textit{critical}.
+  \item \textbf{Services}: exposed ports/protocols (e.g., 443/https, 22/ssh).
+\end{itemize}
+Findings are linked to assets by matching the \texttt{asset name} string. The Assets page displays
+risk summaries (max/avg CVSS) and severity counts, enabling asset-centric prioritization.
+
+\section{Importing Scan Data}
+RiskMapper supports:
+\begin{itemize}[leftmargin=*]
+  \item CSV format with header: \texttt{asset,title,AV,AC,PR,UI,S,C,I,A}
+  \item JSON list of objects with the same keys.
+\end{itemize}
+Rows with invalid or missing metric codes are skipped during import to keep results consistent.
+
+\section{User Interface (Tabs)}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Dashboard}: severity counters and latest findings.
+  \item \textbf{Calculator}: dropdown metric selection, score + severity output, save finding.
+  \item \textbf{Import}: paste or load CSV/JSON and import findings in bulk.
+  \item \textbf{Assets}: create assets and view risk per asset + delete operations.
+\end{itemize}
+
+\section{Conclusion and Future Work}
+RiskMapper demonstrates a complete workflow from vulnerability metrics to actionable prioritization:
+CVSS scoring, severity classification, and asset-context risk mapping. Future improvements:
+persistent database (SQLite), authentication (multi-user), vector string export, and richer scanner imports.
+
+\end{document}
