@@ -35,12 +35,15 @@ def main(page: ft.Page):
         page.snack_bar = toast_bar(msg, kind)
         page.snack_bar.open = True
         page.update()
-
+    
     # ----------------------------
     # DASHBOARD
     # ----------------------------
     dash_counts = ft.Column(spacing=6)
     dash_latest = ft.Column(spacing=8, scroll=ft.ScrollMode.AUTO, height=270)
+    def go_tab(i: int):
+        tabs.selected_index = i
+        tabs.update()
 
     def rebuild_dashboard():
         dash_counts.controls.clear()
@@ -71,7 +74,7 @@ def main(page: ft.Page):
                             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                         ),
                         padding=10,
-                        border=ft.border.all(1, ft.Colors.with_opacity(0.12, ft.Colors.WHITE)),
+                        border=ft.border.all(1, ft.colors.with_opacity(0.12, ft.colors.WHITE)),
                         border_radius=14,
                     )
                 )
@@ -95,9 +98,9 @@ def main(page: ft.Page):
                                 "Quick Actions",
                                 ft.Column(
                                     [
-                                        ft.ElevatedButton("Open CVSS Calculator", on_click=lambda e: tabs.switch_to(1)),
-                                        ft.ElevatedButton("Import Findings", on_click=lambda e: tabs.switch_to(2)),
-                                        ft.ElevatedButton("Manage Assets", on_click=lambda e: tabs.switch_to(3)),
+                                        ft.ElevatedButton("Open CVSS Calculator", on_click=lambda e: go_tab(1)),
+ft.ElevatedButton("Import Findings", on_click=lambda e: go_tab(2)),
+ft.ElevatedButton("Manage Assets", on_click=lambda e: go_tab(3)),
                                     ],
                                     spacing=10,
                                 ),
@@ -155,7 +158,7 @@ def main(page: ft.Page):
                     score=res.score,
                     severity=res.severity,
                 )
-                rebuild_dashboard()
+                rebuild_all()
                 notify("Finding saved.", "success")
             page.update()
 
@@ -365,12 +368,12 @@ def main(page: ft.Page):
                         ft.Text(f"Findings: {len(findings)}", width=110),
                         ft.Text(f"Max: {max_score:.1f}", width=90),
                         ft.Text(f"Avg: {avg_score:.1f}", width=90),
-                        ft.IconButton(icon=ft.Icons.CHEVRON_RIGHT, on_click=on_select),
+                        ft.IconButton(icon=ft.icons.CHEVRON_RIGHT, on_click=on_select),
                     ],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 ),
                 padding=10,
-                border=ft.border.all(1, ft.Colors.with_opacity(0.12, ft.Colors.WHITE)),
+                border=ft.border.all(1, ft.colors.with_opacity(0.12, ft.colors.WHITE)),
                 border_radius=14,
             )
 
@@ -421,7 +424,7 @@ def main(page: ft.Page):
                                         ft.Text(f"{f.score:.1f}", width=70, text_align=ft.TextAlign.RIGHT),
                                         pill(f.severity),
                                         ft.IconButton(
-                                            icon=ft.Icons.DELETE_OUTLINE,
+                                            icon=ft.icons.DELETE_OUTLINE,
                                             tooltip="Delete finding",
                                             on_click=lambda e, fid=f.id: (store.delete_finding(fid), rebuild_all()),
                                         ),
@@ -433,7 +436,7 @@ def main(page: ft.Page):
                             spacing=6,
                         ),
                         padding=10,
-                        border=ft.border.all(1, ft.Colors.with_opacity(0.12, ft.Colors.WHITE)),
+                        border=ft.border.all(1, ft.colors.with_opacity(0.12, ft.colors.WHITE)),
                         border_radius=14,
                     )
                 )
@@ -476,7 +479,7 @@ def main(page: ft.Page):
                             ),
                             ft.Row(
                                 [
-                                    ft.OutlinedButton("Delete Asset", icon=ft.Icons.DELETE, on_click=lambda e: delete_asset()),
+                                    ft.OutlinedButton("Delete Asset", icon=ft.icons.DELETE, on_click=lambda e: delete_asset()),
                                 ],
                                 spacing=10,
                             ),
