@@ -1,0 +1,3 @@
+id,asset,title,score,severity,vector,AV,AC,PR,UI,S,C,I,A
+d7c6271a504e40e6ba725e76c03fda6d,api.ssh.com,SSH vulnerability,6.8,Medium,CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:H/A:N,N,H,L,N,U,H,H,N
+f5c231b98bf84ed79147f1ee4b705646,10.0.0.12,Http request,5.3,Medium,CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:N/A:N,N,H,L,N,U,H,N,N

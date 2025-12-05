@@ -1,1 +1,2 @@
 flet==0.24.1
+pyperclip==1.11.0

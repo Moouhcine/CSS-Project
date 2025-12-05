@@ -106,3 +106,17 @@ def calculate_base_score(metrics: Dict[str, str]) -> CvssResult:
         impact=impact,
         exploitability=exploitability,
     )
+    
+    
+def vector_string(metrics: Dict[str, str]) -> str:
+    """
+    Returns a CVSS v3.1 vector string like:
+    CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N
+    """
+    m = {k: (metrics[k] or "").strip().upper() for k in METRIC_FIELDS}
+    validate_metrics(m)
+    parts = ["CVSS:3.1"]
+    for k in ["AV", "AC", "PR", "UI", "S", "C", "I", "A"]:
+        parts.append(f"{k}:{m[k]}")
+    return "/".join(parts)
+
