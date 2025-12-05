@@ -1,8 +1,8 @@
 \documentclass{beamer}
 \usetheme{Madrid}
 
-\title{RiskMapper: CVSS-Based Risk \& Attack Surface Mapping}
-\subtitle{CSS Module • Chapter 6 (Scanning \& CVSS)}
+\title{RiskMapper: CVSS Risk \& Attack Surface Mapping (Flet + SQLite)}
+\subtitle{CSS Module • Scanning and CVSS}
 \author{Student Name}
 \date{\today}
 
@@ -14,57 +14,67 @@
 
 \begin{frame}{Problem}
 \begin{itemize}
-  \item Vulnerability scanners generate many findings.
-  \item Teams need a consistent method to \textbf{prioritize remediation}.
-  \item Raw scan output lacks asset context (attack surface).
+  \item Vulnerability scans generate many findings.
+  \item We need a consistent way to \textbf{prioritize remediation}.
+  \item Raw scan outputs often lack \textbf{asset context} (attack surface).
 \end{itemize}
 \end{frame}
 
-\begin{frame}{Solution: RiskMapper (Flet Desktop App)}
+\begin{frame}{Solution Overview: RiskMapper}
 \begin{itemize}
-  \item CVSS v3.1 Base Score calculator
-  \item Severity classification: None/Low/Medium/High/Critical
-  \item Import findings from CSV/JSON
-  \item Attack surface inventory: assets + tags + exposed services
-  \item Asset-centric risk view: max/avg score and severity counts
+  \item Desktop GUI in Python using \textbf{Flet}
+  \item Uses \textbf{CVSS v3.1 Base Score} to classify risk
+  \item Maps findings to \textbf{attack surface assets} (tags + exposed services)
+  \item Stores everything in \textbf{SQLite} (data persists after restart)
 \end{itemize}
 \end{frame}
 
-\begin{frame}{CVSS v3.1 Base Metrics}
+\begin{frame}{CVSS v3.1 (Base Metrics)}
 \begin{itemize}
   \item Exploitability: AV, AC, PR, UI
   \item Impact: C, I, A and Scope (S)
-  \item Output:
+  \item Outputs:
   \begin{itemize}
-    \item Base Score (0.0--10.0)
-    \item Severity label for triage
+    \item Base Score (0.0--10.0) + severity class
+    \item Vector string: \texttt{CVSS:3.1/AV:N/AC:L/...}
   \end{itemize}
 \end{itemize}
 \end{frame}
 
-\begin{frame}{Workflow (Demo)}
+\begin{frame}{Main Features (What the app does)}
+\begin{itemize}
+  \item \textbf{Calculator}: choose metrics, compute score, show severity and vector, save
+  \item \textbf{Import}: CSV/JSON bulk scoring, invalid rows skipped
+  \item \textbf{Assets}: asset inventory + multi-select + asset risk view (max/avg, severity counts)
+  \item \textbf{Export}: global CSV export + filtered export for selected assets
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Workflow Demo (5 steps)}
 \begin{enumerate}
-  \item Add assets (hostname/IP) + tags + services
-  \item Add a finding manually OR import from CSV/JSON
-  \item Tool calculates CVSS score and severity
-  \item Dashboard and Assets view show what to fix first
+  \item Create assets (hostname/IP) with tags and services
+  \item Add a finding manually (Calculator) or import CSV/JSON
+  \item CVSS score and severity are computed automatically
+  \item Findings are linked to assets (asset name match)
+  \item Export a report (all findings or selected assets CSV)
 \end{enumerate}
 \end{frame}
 
 \begin{frame}{Why it matters}
 \begin{itemize}
-  \item Consistent scoring across vulnerabilities
-  \item Faster remediation decisions (Critical/High first)
-  \item Attack-surface view helps focus on exposed systems
+  \item Standardized risk scoring: consistent triage
+  \item Faster remediation: focus on Critical/High first
+  \item Attack surface view: prioritize exposed systems
+  \item Persistence: SQLite keeps history across restarts
 \end{itemize}
 \end{frame}
 
 \begin{frame}{Next Improvements}
 \begin{itemize}
-  \item SQLite persistence and multi-user authentication
-  \item Export CVSS vector strings
-  \item Import from real scanner formats (Nmap XML, Nessus)
-  \item Trend charts and SLA tracking
+  \item SQLite enhancements: updates/editing, audit logs
+  \item Import real scanner formats (Nmap XML, Nessus)
+  \item Charts and trends (risk over time, SLA tracking)
+  \item CVSS Temporal/Environmental scoring (advanced)
 \end{itemize}
 \end{frame}
 
