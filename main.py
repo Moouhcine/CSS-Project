@@ -20,6 +20,18 @@ METRIC_OPTIONS = {
     "A":  [("H", "High"), ("L", "Low"), ("N", "None")],
 }
 
+# Human friendly metric names to show beside acronyms in the UI
+METRIC_LABELS = {
+    "AV": "Attack Vector",
+    "AC": "Attack Complexity",
+    "PR": "Privileges Required",
+    "UI": "User Interaction",
+    "S": "Scope",
+    "C": "Confidentiality",
+    "I": "Integrity",
+    "A": "Availability",
+}
+
 
 def split_csv_field(s: str):
     return [x.strip() for x in (s or "").split(",") if x.strip()]
@@ -32,6 +44,33 @@ def main(page: ft.Page):
     page.window.height = 760
     page.padding = 18
 
+    # Thèmes moderne (Material 3) + toggle Dark/Light en haut à droite
+    page.theme = ft.Theme(color_scheme_seed=ft.colors.BLUE, use_material3=True)
+    page.dark_theme = ft.Theme(color_scheme_seed=ft.colors.BLUE, use_material3=True)
+
+    # Bouton de bascule du thème dans l'AppBar
+    theme_btn = ft.IconButton(icon=ft.icons.LIGHT_MODE, tooltip="Passer en mode clair")
+
+    def toggle_theme(e):
+        page.theme_mode = (
+            ft.ThemeMode.LIGHT if page.theme_mode == ft.ThemeMode.DARK else ft.ThemeMode.DARK
+        )
+        # Mettre à jour l'icône et l'infobulle
+        if page.theme_mode == ft.ThemeMode.LIGHT:
+            theme_btn.icon = ft.icons.DARK_MODE
+            theme_btn.tooltip = "Passer en mode sombre"
+        else:
+            theme_btn.icon = ft.icons.LIGHT_MODE
+            theme_btn.tooltip = "Passer en mode clair"
+        page.update()
+
+    theme_btn.on_click = toggle_theme
+    page.appbar = ft.AppBar(
+        title=ft.Text("RiskMapper"),
+        center_title=False,
+        actions=[theme_btn],
+    )
+
     store = Store()
     store.load_from_db()
 
@@ -39,8 +78,10 @@ def main(page: ft.Page):
     # Shared UI helpers
     # ----------------------------
     def notify(msg: str, kind: str = "info"):
-        page.snack_bar = toast_bar(msg, kind)
-        page.snack_bar.open = True
+        # `page.snack_bar` is deprecated; append to overlay instead
+        sb = toast_bar(msg, kind)
+        page.overlay.append(sb)
+        sb.open = True
         page.update()
 
     def copy_text(text: str):
@@ -74,7 +115,8 @@ def main(page: ft.Page):
 
     def build_findings_csv() -> str:
         output = io.StringIO()
-        w = csv.writer(output)
+        # Export with semicolon delimiter (European locales friendly)
+        w = csv.writer(output, delimiter=';')
         w.writerow(["id", "asset", "title", "score", "severity", "vector", "AV", "AC", "PR", "UI", "S", "C", "I", "A"])
 
         sorted_findings = sorted(store.findings.values(), key=lambda x: x.score, reverse=True)
@@ -88,7 +130,8 @@ def main(page: ft.Page):
 
     def build_findings_csv_for_assets(asset_names: list[str]) -> str:
         output = io.StringIO()
-        w = csv.writer(output)
+        # Export with semicolon delimiter (European locales friendly)
+        w = csv.writer(output, delimiter=';')
         w.writerow(["id", "asset", "title", "score", "severity", "vector", "AV", "AC", "PR", "UI", "S", "C", "I", "A"])
 
         selected_set = {a.strip().lower() for a in asset_names if a and a.strip()}
@@ -166,17 +209,37 @@ def main(page: ft.Page):
             dash_latest.controls.append(ft.Text("No findings yet. Use Calculator or Import.", opacity=0.8))
         else:
             for f in reversed(findings):
+                # Recompute impact/exploitability from stored metrics for display
+                try:
+                    res = calculate_base_score(f.metrics)
+                    impact_txt = f"I:{res.impact:.1f}"
+                    explo_txt = f"E:{res.exploitability:.1f}"
+                except Exception:
+                    impact_txt = "I:—"
+                    explo_txt = "E:—"
+
                 dash_latest.controls.append(
                     ft.Container(
                         content=ft.Row(
                             [
                                 ft.Text(f.asset_name, width=200),
                                 ft.Text(f.title, expand=True),
-                                ft.Text(f"{f.score:.1f}", width=70, text_align=ft.TextAlign.RIGHT),
-                                pill(f.severity),
+                                ft.Text(impact_txt, width=70, text_align=ft.TextAlign.RIGHT, opacity=0.85),
+                                ft.Text(explo_txt, width=70, text_align=ft.TextAlign.RIGHT, opacity=0.85),
+                                ft.Container(content=pill(f.severity, f.score), margin=ft.margin.only(left=8)),
                             ],
                             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                         ),
+                        on_click=lambda e, an=f.asset_name: (
+                            (last_selected_asset.__setitem__("id", store.get_asset_by_name(an).id)
+                             if store.get_asset_by_name(an) is not None
+                             else last_selected_asset.__setitem__("id", None)),
+                            go_tab(3),
+                            rebuild_assets_list(),
+                            rebuild_asset_detail(),
+                            page.update()
+                        ),
+                        ink=True,
                         padding=10,
                         border=ft.border.all(1, ft.colors.with_opacity(0.12, ft.colors.WHITE)),
                         border_radius=14,
@@ -227,13 +290,16 @@ def main(page: ft.Page):
     # ----------------------------
     # CALCULATOR
     # ----------------------------
-    calc_asset = ft.TextField(label="Asset name (optional)", hint_text="e.g., web-portal-01")
+    # Asset selector: choose existing asset or enter a custom name
+    calc_asset_dropdown = ft.Dropdown(label="Select existing asset (optional)", options=[])
+    calc_asset_custom = ft.TextField(label="Or enter custom asset name (optional)", hint_text="e.g., web-portal-01")
     calc_title = ft.TextField(label="Finding title (optional)", hint_text="e.g., SQL Injection in /login")
 
     metric_dropdowns = {}
     for k in METRIC_FIELDS:
         opts = [ft.dropdown.Option(code, text=f"{code} — {label}") for code, label in METRIC_OPTIONS[k]]
-        metric_dropdowns[k] = ft.Dropdown(label=k, options=opts)
+        label_text = f"{k}: {METRIC_LABELS.get(k, '')}"
+        metric_dropdowns[k] = ft.Dropdown(label=label_text, options=opts)
 
     calc_result_line = ft.Row([], spacing=10)
     calc_details = ft.Column([], spacing=6)
@@ -246,7 +312,7 @@ def main(page: ft.Page):
 
             calc_result_line.controls = [
                 ft.Text(f"Base Score: {res.score:.1f}", size=20, weight=ft.FontWeight.BOLD),
-                pill(res.severity),
+                pill(res.severity, res.score),
             ]
 
             calc_details.controls = [
@@ -266,8 +332,17 @@ def main(page: ft.Page):
             ]
 
             if save:
+                # Determine asset name: prefer dropdown selection, else custom text, else Unassigned
+                chosen_asset = None
+                if calc_asset_dropdown.value:
+                    chosen_asset = calc_asset_dropdown.value
+                elif (calc_asset_custom.value or "").strip():
+                    chosen_asset = calc_asset_custom.value.strip()
+                else:
+                    chosen_asset = "Unassigned"
+
                 store.add_finding(
-                    asset_name=calc_asset.value or "Unassigned",
+                    asset_name=chosen_asset,
                     title=calc_title.value or "Manual Finding",
                     metrics={k: metrics[k] for k in METRIC_FIELDS},
                     score=res.score,
@@ -277,6 +352,7 @@ def main(page: ft.Page):
                 rebuild_all()
                 notify("Finding saved.", "success")
 
+            # Clear custom input after save/calc to avoid accidental reuse
             page.update()
 
         except Exception as ex:
@@ -285,7 +361,7 @@ def main(page: ft.Page):
     calculator_view = ft.Column(
         [
             section_title("CVSS v3.1 Calculator"),
-            info_card("Finding Info", ft.Column([calc_asset, calc_title], spacing=10)),
+            info_card("Finding Info", ft.Column([calc_asset_dropdown, calc_asset_custom, calc_title], spacing=10)),
             info_card(
                 "Base Metrics",
                 ft.Row(
@@ -372,8 +448,14 @@ def main(page: ft.Page):
                     skipped += 1
                     continue
 
+                # Ensure asset exists in store (create with empty tags/services if missing)
+                asset_name = (item.get("asset") or "").strip()
+                if asset_name:
+                    if store.get_asset_by_name(asset_name) is None:
+                        store.add_asset(name=asset_name, tags=[], services=[])
+
                 store.add_finding(
-                    asset_name=item["asset"],
+                    asset_name=asset_name or "Unassigned",
                     title=item["title"],
                     metrics=metrics,
                     score=res.score,
@@ -526,6 +608,8 @@ def main(page: ft.Page):
         for aid in list(store.assets.keys())[::-1]:
             assets_list.controls.append(mk_row(aid))
 
+        # Update calculator asset dropdown whenever assets list changes
+        update_asset_dropdown()
         page.update()
 
     def clear_selection(e):
@@ -567,6 +651,15 @@ def main(page: ft.Page):
             finding_cards.controls.append(ft.Text("No findings mapped to this asset yet.", opacity=0.75))
         else:
             for f in sorted(findings, key=lambda x: x.score, reverse=True):
+                # Recompute impact/exploitability for display
+                try:
+                    res = calculate_base_score(f.metrics)
+                    impact_txt = f"I:{res.impact:.1f}"
+                    explo_txt = f"E:{res.exploitability:.1f}"
+                except Exception:
+                    impact_txt = "I:—"
+                    explo_txt = "E:—"
+
                 finding_cards.controls.append(
                     ft.Container(
                         content=ft.Column(
@@ -574,8 +667,9 @@ def main(page: ft.Page):
                                 ft.Row(
                                     [
                                         ft.Text(f.title, expand=True),
-                                        ft.Text(f"{f.score:.1f}", width=70, text_align=ft.TextAlign.RIGHT),
-                                        pill(f.severity),
+                                        ft.Text(impact_txt, width=60, text_align=ft.TextAlign.RIGHT, opacity=0.85),
+                                        ft.Text(explo_txt, width=60, text_align=ft.TextAlign.RIGHT, opacity=0.85),
+                                        ft.Container(content=pill(f.severity, f.score), margin=ft.margin.only(left=8)),
                                         ft.IconButton(
                                             icon=ft.icons.DELETE_OUTLINE,
                                             tooltip="Delete finding",
@@ -673,6 +767,19 @@ def main(page: ft.Page):
             ]
         )
         page.update()
+
+
+    def update_asset_dropdown():
+        # Rebuild options from store.assets (preserve selection if possible)
+        current = getattr(calc_asset_dropdown, "value", None)
+        opts = [ft.dropdown.Option(a.name, text=a.name) for a in store.assets.values()]
+        calc_asset_dropdown.options = opts
+        # Preserve selection if the same name still exists
+        names = [a.name for a in store.assets.values()]
+        if current and current in names:
+            calc_asset_dropdown.value = current
+        else:
+            calc_asset_dropdown.value = None
 
     def add_asset_action(e):
         name = (asset_name.value or "").strip()

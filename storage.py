@@ -48,6 +48,19 @@ class Store:
                 vector=f["vector"],
             )
 
+        # Backfill: ensure every asset name referenced by findings exists as an Asset
+        # This helps older databases that have findings but no corresponding assets yet.
+        existing_names = {a.name.strip().lower() for a in self.assets.values()}
+        for f in self.findings.values():
+            an = (f.asset_name or "").strip()
+            key = an.lower()
+            if an and key not in existing_names:
+                aid = self._id()
+                self.assets[aid] = Asset(id=aid, name=an, tags=[], services=[])
+                # Persist to DB so the Assets tab shows them and future runs keep them
+                db.upsert_asset(aid, an, [], [])
+                existing_names.add(key)
+
     # --- Assets ---
     def add_asset(self, name: str, tags: List[str], services: List[str]) -> Asset:
         a = Asset(id=self._id(), name=name.strip(), tags=tags, services=services)

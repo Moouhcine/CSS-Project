@@ -9,10 +9,25 @@ def _clean(s: Any) -> str:
 
 def parse_csv_text(csv_text: str) -> List[Dict[str, str]]:
     """
-    CSV must include header: asset,title,AV,AC,PR,UI,S,C,I,A
+    CSV must include header keys: asset,title,AV,AC,PR,UI,S,C,I,A
+    Delimiter can be a comma or a semicolon.
     """
     lines = csv_text.splitlines()
-    reader = csv.DictReader(lines)
+    if not lines:
+        return []
+
+    # Try to detect delimiter between comma and semicolon
+    delimiter = ","
+    sample = "\n".join(lines[:5])
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=[",", ";"])  # type: ignore[arg-type]
+        delimiter = getattr(dialect, "delimiter", ",") or ","
+    except Exception:
+        header = lines[0]
+        if ";" in header and (header.count(";") >= header.count(",")):
+            delimiter = ";"
+
+    reader = csv.DictReader(lines, delimiter=delimiter)
     findings: List[Dict[str, str]] = []
     for row in reader:
         item = {k: _clean(row.get(k)) for k in REQUIRED}

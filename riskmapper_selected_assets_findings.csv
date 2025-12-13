@@ -1,0 +1,3 @@
+id,asset,title,score,severity,vector,AV,AC,PR,UI,S,C,I,A
+6a6a21058dc74cbb96045608e39cde5a,10.0.0.2,HTTP request,9.3,Critical,CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:L/I:H/A:N,N,L,N,N,C,L,H,N
+37cc82bcf6f741e3ab2a0a91ad293ee0,10.0.0.2,Test,4.2,Medium,CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:U/C:L/I:L/A:L,L,H,L,R,U,L,L,L
