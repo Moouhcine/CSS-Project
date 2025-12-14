@@ -7,7 +7,6 @@ def pill(severity: str, score: float | None = None) -> ft.Container:
     """
     key = (severity or "").strip().lower()
 
-    # Couleurs adoucies (fonds pâles) + bordure légère pour le contraste
     bg_map = {
         "critical": ft.colors.RED_200,
         "high": ft.colors.DEEP_ORANGE_200,
@@ -43,10 +42,8 @@ def info_card(title: str, content: ft.Control) -> ft.Container:
     return ft.Container(
         content=ft.Column([ft.Text(title, weight=ft.FontWeight.BOLD), content], spacing=10),
         padding=16,
-        # Mini bordure grise + coins arrondis pour mieux distinguer les cartes
         border=ft.border.all(1, ft.colors.with_opacity(0.35, ft.colors.GREY_500)),
         border_radius=14,
-        # Remplacer le blanc pur par un gris très léger (lisible en light/dark)
         bgcolor=ft.colors.with_opacity(0.07, ft.colors.GREY_300),
     )
 

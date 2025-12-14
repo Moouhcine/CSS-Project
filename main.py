@@ -20,7 +20,6 @@ METRIC_OPTIONS = {
     "A":  [("H", "High"), ("L", "Low"), ("N", "None")],
 }
 
-# Human friendly metric names to show beside acronyms in the UI
 METRIC_LABELS = {
     "AV": "Attack Vector",
     "AC": "Attack Complexity",
@@ -44,18 +43,15 @@ def main(page: ft.Page):
     page.window.height = 760
     page.padding = 18
 
-    # Thèmes moderne (Material 3) + toggle Dark/Light en haut à droite
     page.theme = ft.Theme(color_scheme_seed=ft.colors.BLUE, use_material3=True)
     page.dark_theme = ft.Theme(color_scheme_seed=ft.colors.BLUE, use_material3=True)
 
-    # Bouton de bascule du thème dans l'AppBar
     theme_btn = ft.IconButton(icon=ft.icons.LIGHT_MODE, tooltip="Passer en mode clair")
 
     def toggle_theme(e):
         page.theme_mode = (
             ft.ThemeMode.LIGHT if page.theme_mode == ft.ThemeMode.DARK else ft.ThemeMode.DARK
         )
-        # Mettre à jour l'icône et l'infobulle
         if page.theme_mode == ft.ThemeMode.LIGHT:
             theme_btn.icon = ft.icons.DARK_MODE
             theme_btn.tooltip = "Passer en mode sombre"
@@ -74,20 +70,13 @@ def main(page: ft.Page):
     store = Store()
     store.load_from_db()
 
-    # ----------------------------
-    # Shared UI helpers
-    # ----------------------------
     def notify(msg: str, kind: str = "info"):
-        # `page.snack_bar` is deprecated; append to overlay instead
         sb = toast_bar(msg, kind)
         page.overlay.append(sb)
         sb.open = True
         page.update()
 
     def copy_text(text: str):
-        """
-        Clipboard: try page.set_clipboard (common in many Flet versions), fallback to pyperclip.
-        """
         try:
             if hasattr(page, "set_clipboard"):
                 page.set_clipboard(text)
@@ -102,9 +91,6 @@ def main(page: ft.Page):
         except Exception as ex:
             notify(f"Clipboard copy failed: {ex}", "error")
 
-    # ----------------------------
-    # Export helpers
-    # ----------------------------
     export_picker = ft.FilePicker()
     page.overlay.append(export_picker)
 
@@ -115,7 +101,6 @@ def main(page: ft.Page):
 
     def build_findings_csv() -> str:
         output = io.StringIO()
-        # Export with semicolon delimiter (European locales friendly)
         w = csv.writer(output, delimiter=';')
         w.writerow(["id", "asset", "title", "score", "severity", "vector", "AV", "AC", "PR", "UI", "S", "C", "I", "A"])
 
@@ -130,7 +115,6 @@ def main(page: ft.Page):
 
     def build_findings_csv_for_assets(asset_names: list[str]) -> str:
         output = io.StringIO()
-        # Export with semicolon delimiter (European locales friendly)
         w = csv.writer(output, delimiter=';')
         w.writerow(["id", "asset", "title", "score", "severity", "vector", "AV", "AC", "PR", "UI", "S", "C", "I", "A"])
 
@@ -182,9 +166,7 @@ def main(page: ft.Page):
 
     assets_export_picker.on_result = on_assets_export_result
 
-    # ----------------------------
-    # DASHBOARD
-    # ----------------------------
+
     dash_counts = ft.Column(spacing=6)
     dash_latest = ft.Column(spacing=8, scroll=ft.ScrollMode.AUTO, height=270)
 
@@ -209,7 +191,6 @@ def main(page: ft.Page):
             dash_latest.controls.append(ft.Text("No findings yet. Use Calculator or Import.", opacity=0.8))
         else:
             for f in reversed(findings):
-                # Recompute impact/exploitability from stored metrics for display
                 try:
                     res = calculate_base_score(f.metrics)
                     impact_txt = f"I:{res.impact:.1f}"
@@ -231,7 +212,7 @@ def main(page: ft.Page):
                             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                         ),
                         on_click=lambda e, an=f.asset_name: (
-                            (last_selected_asset.__setitem__("id", store.get_asset_by_name(an).id)
+                            (last_selected_asset.__setitem__("id", store.get_asset_by_name(an).id) # type: ignore
                              if store.get_asset_by_name(an) is not None
                              else last_selected_asset.__setitem__("id", None)),
                             go_tab(3),
@@ -287,10 +268,6 @@ def main(page: ft.Page):
         spacing=16,
     )
 
-    # ----------------------------
-    # CALCULATOR
-    # ----------------------------
-    # Asset selector: choose existing asset or enter a custom name
     calc_asset_dropdown = ft.Dropdown(label="Select existing asset (optional)", options=[])
     calc_asset_custom = ft.TextField(label="Or enter custom asset name (optional)", hint_text="e.g., web-portal-01")
     calc_title = ft.TextField(label="Finding title (optional)", hint_text="e.g., SQL Injection in /login")
@@ -332,12 +309,11 @@ def main(page: ft.Page):
             ]
 
             if save:
-                # Determine asset name: prefer dropdown selection, else custom text, else Unassigned
                 chosen_asset = None
                 if calc_asset_dropdown.value:
                     chosen_asset = calc_asset_dropdown.value
                 elif (calc_asset_custom.value or "").strip():
-                    chosen_asset = calc_asset_custom.value.strip()
+                    chosen_asset = calc_asset_custom.value.strip() # type: ignore
                 else:
                     chosen_asset = "Unassigned"
 
@@ -352,7 +328,6 @@ def main(page: ft.Page):
                 rebuild_all()
                 notify("Finding saved.", "success")
 
-            # Clear custom input after save/calc to avoid accidental reuse
             page.update()
 
         except Exception as ex:
@@ -388,9 +363,6 @@ def main(page: ft.Page):
         scroll=ft.ScrollMode.AUTO,
     )
 
-    # ----------------------------
-    # IMPORT
-    # ----------------------------
     import_format = ft.RadioGroup(
         content=ft.Row(
             [
@@ -448,7 +420,6 @@ def main(page: ft.Page):
                     skipped += 1
                     continue
 
-                # Ensure asset exists in store (create with empty tags/services if missing)
                 asset_name = (item.get("asset") or "").strip()
                 if asset_name:
                     if store.get_asset_by_name(asset_name) is None:
@@ -518,9 +489,6 @@ def main(page: ft.Page):
         scroll=ft.ScrollMode.AUTO,
     )
 
-    # ----------------------------
-    # ASSETS (attack surface mapper) - Multi select + Export B
-    # ----------------------------
     asset_name = ft.TextField(label="Asset name", hint_text="e.g., api.example.com or 10.0.0.12")
     asset_tags = ft.TextField(label="Tags (comma-separated)", hint_text="internet-facing, prod, pci")
     asset_services = ft.TextField(label="Services (comma-separated)", hint_text="80/http, 443/https, 22/ssh")
@@ -529,8 +497,8 @@ def main(page: ft.Page):
     asset_detail_title = ft.Text("Select assets to view details.", size=16, weight=ft.FontWeight.BOLD)
     asset_detail_body = ft.Column(spacing=8)
 
-    selected_assets = set()            # multi-select: asset IDs
-    last_selected_asset = {"id": None} # last click -> details panel
+    selected_assets = set()
+    last_selected_asset = {"id": None}
 
     def export_selected_assets():
         if not selected_assets:
@@ -578,7 +546,7 @@ def main(page: ft.Page):
                         last_selected_asset["id"] = None
                 else:
                     selected_assets.add(aid)
-                    last_selected_asset["id"] = aid
+                    last_selected_asset["id"] = aid # type: ignore
 
                 rebuild_assets_list()
                 rebuild_asset_detail()
@@ -608,7 +576,6 @@ def main(page: ft.Page):
         for aid in list(store.assets.keys())[::-1]:
             assets_list.controls.append(mk_row(aid))
 
-        # Update calculator asset dropdown whenever assets list changes
         update_asset_dropdown()
         page.update()
 
@@ -651,7 +618,6 @@ def main(page: ft.Page):
             finding_cards.controls.append(ft.Text("No findings mapped to this asset yet.", opacity=0.75))
         else:
             for f in sorted(findings, key=lambda x: x.score, reverse=True):
-                # Recompute impact/exploitability for display
                 try:
                     res = calculate_base_score(f.metrics)
                     impact_txt = f"I:{res.impact:.1f}"
@@ -699,7 +665,6 @@ def main(page: ft.Page):
                 )
 
         def delete_asset():
-            # Remove from selection sets too
             if aid in selected_assets:
                 selected_assets.remove(aid)
             last_selected_asset["id"] = None
@@ -770,11 +735,9 @@ def main(page: ft.Page):
 
 
     def update_asset_dropdown():
-        # Rebuild options from store.assets (preserve selection if possible)
         current = getattr(calc_asset_dropdown, "value", None)
         opts = [ft.dropdown.Option(a.name, text=a.name) for a in store.assets.values()]
         calc_asset_dropdown.options = opts
-        # Preserve selection if the same name still exists
         names = [a.name for a in store.assets.values()]
         if current and current in names:
             calc_asset_dropdown.value = current
@@ -787,8 +750,8 @@ def main(page: ft.Page):
             notify("Asset name is required.", "error")
             return
 
-        tags = split_csv_field(asset_tags.value)
-        services = split_csv_field(asset_services.value)
+        tags = split_csv_field(asset_tags.value) # type: ignore
+        services = split_csv_field(asset_services.value) # type: ignore
         store.add_asset(name=name, tags=tags, services=services)
 
         asset_name.value = ""
@@ -844,17 +807,11 @@ def main(page: ft.Page):
         scroll=ft.ScrollMode.AUTO,
     )
 
-    # ----------------------------
-    # Utility: rebuild everything
-    # ----------------------------
     def rebuild_all():
         rebuild_dashboard()
         rebuild_assets_list()
         rebuild_asset_detail()
 
-    # ----------------------------
-    # Tabs
-    # ----------------------------
     tabs = ft.Tabs(
         selected_index=0,
         animation_duration=250,

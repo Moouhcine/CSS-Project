@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 import uuid
 
-import db  # new
+import db
 
 @dataclass
 class Asset:
@@ -48,8 +48,6 @@ class Store:
                 vector=f["vector"],
             )
 
-        # Backfill: ensure every asset name referenced by findings exists as an Asset
-        # This helps older databases that have findings but no corresponding assets yet.
         existing_names = {a.name.strip().lower() for a in self.assets.values()}
         for f in self.findings.values():
             an = (f.asset_name or "").strip()
@@ -57,11 +55,9 @@ class Store:
             if an and key not in existing_names:
                 aid = self._id()
                 self.assets[aid] = Asset(id=aid, name=an, tags=[], services=[])
-                # Persist to DB so the Assets tab shows them and future runs keep them
                 db.upsert_asset(aid, an, [], [])
                 existing_names.add(key)
 
-    # --- Assets ---
     def add_asset(self, name: str, tags: List[str], services: List[str]) -> Asset:
         a = Asset(id=self._id(), name=name.strip(), tags=tags, services=services)
         self.assets[a.id] = a
@@ -80,7 +76,6 @@ class Store:
             db.delete_asset(asset_id)
             del self.assets[asset_id]
 
-    # --- Findings ---
     def add_finding(
         self,
         asset_name: str,
@@ -108,7 +103,6 @@ class Store:
             db.delete_finding(finding_id)
             del self.findings[finding_id]
 
-    # --- Analytics ---
     def findings_for_asset_name(self, asset_name: str) -> List[Finding]:
         key = asset_name.strip().lower()
         return [f for f in self.findings.values() if f.asset_name.strip().lower() == key]

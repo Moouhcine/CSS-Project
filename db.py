@@ -55,7 +55,6 @@ def _split_csv(s: str) -> List[str]:
         return []
     return [x.strip() for x in s.split(",") if x.strip()]
 
-# -------- Assets --------
 def upsert_asset(asset_id: str, name: str, tags: List[str], services: List[str]) -> None:
     con = connect()
     cur = con.cursor()
@@ -91,7 +90,6 @@ def load_assets() -> List[Dict[str, Any]]:
         for r in rows
     ]
 
-# -------- Findings --------
 def insert_finding(
     finding_id: str,
     asset_name: str,

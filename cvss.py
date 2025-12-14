@@ -1,20 +1,13 @@
-
-
-
-# 3) `cvss.py` (CVSS v3.1 Base Score engine)
-
-
 import math
 from dataclasses import dataclass
 from typing import Dict
 
-# CVSS v3.1 metric weights (Base)
 AV = {"N": 0.85, "A": 0.62, "L": 0.55, "P": 0.20}
 AC = {"L": 0.77, "H": 0.44}
 UI = {"N": 0.85, "R": 0.62}
 CIA = {"H": 0.56, "L": 0.22, "N": 0.00}
-PR_U = {"N": 0.85, "L": 0.62, "H": 0.27}  # Scope Unchanged
-PR_C = {"N": 0.85, "L": 0.68, "H": 0.50}  # Scope Changed
+PR_U = {"N": 0.85, "L": 0.62, "H": 0.27}
+PR_C = {"N": 0.85, "L": 0.68, "H": 0.50}
 
 METRIC_FIELDS = ["AV", "AC", "PR", "UI", "S", "C", "I", "A"]
 
@@ -37,8 +30,6 @@ class CvssResult:
     exploitability: float
 
 def round_up_1_decimal(x: float) -> float:
-    # CVSS requires "round up" to 1 decimal place (not standard rounding).
-    # Example: 4.01 becomes 4.1
     return math.ceil(x * 10.0 - 1e-9) / 10.0
 
 def severity(score: float) -> str:
@@ -61,11 +52,6 @@ def validate_metrics(metrics: Dict[str, str]) -> None:
             raise ValueError(f"Invalid {k}: '{v}'. Allowed: {sorted(ALLOWED[k])}")
 
 def calculate_base_score(metrics: Dict[str, str]) -> CvssResult:
-    """
-    CVSS v3.1 Base Score calculation.
-    metrics keys: AV, AC, PR, UI, S, C, I, A
-    values are short codes: e.g. AV=N, AC=L, PR=N, UI=R, S=U, C=L, I=L, A=N
-    """
     m = {k: (metrics[k] or "").strip().upper() for k in METRIC_FIELDS}
     validate_metrics(m)
 
@@ -109,10 +95,7 @@ def calculate_base_score(metrics: Dict[str, str]) -> CvssResult:
     
     
 def vector_string(metrics: Dict[str, str]) -> str:
-    """
-    Returns a CVSS v3.1 vector string like:
-    CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N
-    """
+
     m = {k: (metrics[k] or "").strip().upper() for k in METRIC_FIELDS}
     validate_metrics(m)
     parts = ["CVSS:3.1"]

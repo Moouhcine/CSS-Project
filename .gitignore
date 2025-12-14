@@ -4,3 +4,6 @@
 *.db
 /.continue
 /.idea
+/.vscode
+*.csv
+!sample_findings.csv
